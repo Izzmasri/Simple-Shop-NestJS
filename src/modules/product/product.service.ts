@@ -35,21 +35,39 @@ export class ProductService {
     });
   }
 
-  findAll(query: ProductQuery) {
+  async findAll(query: ProductQuery) {
     return this.prismaService.$transaction(async (prisma) => {
       const whereClause: Prisma.ProductWhereInput = query.name
-        ? { name: { contains: query.name } }
-        : {};
+        ? { name: { contains: query.name }, isDeleted: false }
+        : { isDeleted: false };
+
       const pagination = this.prismaService.handleQueryPagination(query);
-      const proucts = await prisma.product.findMany({
-        ...removeFields(pagination, ['page']),
+
+      const products = await prisma.product.findMany({
+        ...removeFields(pagination, 'page'),
         where: whereClause,
+        orderBy: { createdAt: 'desc' }, // Sort by newest
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          merchantId: true,
+          createdAt: true,
+          Asset: {
+            select: {
+              id: true,
+              url: true,
+              fileType: true,
+            },
+          },
+        },
       });
-      const count = await prisma.product.count({
-        where: whereClause,
-      });
+
+      const count = await prisma.product.count({ where: whereClause });
+
       return {
-        data: proucts,
+        data: products,
         ...this.prismaService.formatPaginationResponse({
           page: pagination.page,
           count,

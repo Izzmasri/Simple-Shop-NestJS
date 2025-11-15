@@ -1,5 +1,10 @@
 import z, { ZodType } from 'zod';
-import { CreateOrderDTO, CreateOrderReturnDTO } from '../types/order.dto';
+import {
+  CreateOrderDTO,
+  CreateOrderReturnDTO,
+  UpdateOrderStatusDTO,
+  UpdateReturnStatusDTO,
+} from '../types/order.dto';
 
 export const createOrderDTOValidationSchema = z.array(
   z.object({
@@ -17,3 +22,11 @@ export const createReturnDTOValidationSchema = z.object({
     }),
   ),
 }) satisfies ZodType<CreateOrderReturnDTO>;
+
+export const updateOrderStatusSchema = z.object({
+  orderStatus: z.enum(['PENDING', 'SUCCESS']),
+}) satisfies ZodType<UpdateOrderStatusDTO>;
+
+export const updateReturnStatusSchema = z.object({
+  status: z.enum(['PICKED', 'REFUND', 'PENDING']),
+}) satisfies ZodType<UpdateReturnStatusDTO>;

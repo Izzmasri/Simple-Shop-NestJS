@@ -18,6 +18,15 @@ import type {
   PaginatedResult,
   PaginationQueryType,
 } from 'src/types/util.types';
+import { Patch } from '@nestjs/common';
+import {
+  updateOrderStatusSchema,
+  updateReturnStatusSchema,
+} from './util/order.validation.schema';
+import type {
+  UpdateOrderStatusDTO,
+  UpdateReturnStatusDTO,
+} from './types/order.dto';
 
 @Controller('order')
 @Roles(['CUSTOMER'])
@@ -42,6 +51,27 @@ export class OrderController {
     query: PaginationQueryType,
   ): Promise<PaginatedResult<OrderOverviewResponseDTO>> {
     return this.orderService.findAll(BigInt(request.user!.id), query);
+  }
+  // Admin: Update order status
+  @Patch(':id/status')
+  @Roles('ADMIN')
+  async updateOrderStatus(
+    @Param('id') id: string,
+    @Body(new ZodValidationPipe(updateOrderStatusSchema))
+    updateData: UpdateOrderStatusDTO,
+  ): Promise<OrderResponseDTO> {
+    return this.orderService.updateOrderStatus(Number(id), updateData);
+  }
+
+  // Admin: Update return status
+  @Patch('return/:returnId/status')
+  @Roles('ADMIN')
+  async updateReturnStatus(
+    @Param('returnId') returnId: string,
+    @Body(new ZodValidationPipe(updateReturnStatusSchema))
+    updateData: UpdateReturnStatusDTO,
+  ): Promise<OrderResponseDTO> {
+    return this.orderService.updateReturnStatus(Number(returnId), updateData);
   }
 
   @Get(':id')

@@ -1,4 +1,4 @@
-import { Prisma } from 'generated/prisma';
+import { Prisma, OrderStatus, ReturnStatus } from 'generated/prisma';
 
 export type CreateOrderDTO = { productId: number; qty: number }[];
 
@@ -32,4 +32,12 @@ export type OrderOverviewResponseDTO = Prisma.OrderGetPayload<{
 export type CreateOrderReturnDTO = {
   orderId: number;
   items: { productId: number; qty: number }[];
+};
+
+export type UpdateOrderStatusDTO = {
+  orderStatus: OrderStatus;
+};
+
+export type UpdateReturnStatusDTO = {
+  status: ReturnStatus;
 };

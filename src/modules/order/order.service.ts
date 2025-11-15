@@ -10,6 +10,11 @@ import { Prisma, Product } from 'generated/prisma';
 import { Decimal } from 'generated/prisma/runtime/library';
 import { PaginatedResult, PaginationQueryType } from 'src/types/util.types';
 import { removeFields } from 'src/utils/object.util';
+import { OrderStatus, ReturnStatus } from '@generated/prisma';
+import type {
+  UpdateOrderStatusDTO,
+  UpdateReturnStatusDTO,
+} from './types/order.dto';
 
 @Injectable()
 export class OrderService {
@@ -68,8 +73,101 @@ export class OrderService {
 
     return createdOrder;
   }
+  async updateOrderStatus(
+    orderId: number,
+    updateData: UpdateOrderStatusDTO,
+  ): Promise<OrderResponseDTO> {
+    const updatedOrder = await this.prismaService.order.update({
+      where: { id: orderId },
+      data: { orderStatus: updateData.orderStatus },
+      include: {
+        orderProducts: {
+          include: { product: true },
+        },
+        transactions: true,
+        orderReturns: {
+          include: {
+            returnedItems: {
+              include: { product: true },
+            },
+          },
+        },
+      },
+    });
 
-  findAll(
+    return updatedOrder;
+  }
+
+  /**
+   * Admin: Update return status with transaction handling
+   */
+  async updateReturnStatus(
+    returnId: number,
+    updateData: UpdateReturnStatusDTO,
+  ): Promise<OrderResponseDTO> {
+    return this.prismaService.$transaction(async (prismaTX) => {
+      // Get the return with related data
+      const orderReturn = await prismaTX.orderReturn.findUniqueOrThrow({
+        where: { id: returnId },
+        include: {
+          returnedItems: {
+            include: { product: true },
+          },
+          order: {
+            include: { user: true },
+          },
+        },
+      });
+
+      // Update return status
+      const updatedReturn = await prismaTX.orderReturn.update({
+        where: { id: returnId },
+        data: { status: updateData.status },
+      });
+
+      // If status changed to REFUND, create credit transaction
+      if (updateData.status === 'REFUND' && orderReturn.status !== 'REFUND') {
+        // Calculate refund amount
+        const refundAmount = MoneyUtil.calculateTotalAmount(
+          orderReturn.returnedItems.map((item) => ({
+            price: item.product.price,
+            quantity: item.qty,
+          })),
+        );
+
+        // Create credit transaction for refund
+        await prismaTX.userTransaction.create({
+          data: {
+            amount: refundAmount,
+            type: 'CREDIT',
+            userId: orderReturn.order.userId,
+            orderId: orderReturn.orderId,
+            orderReturnId: returnId,
+          },
+        });
+      }
+
+      // Return the complete order
+      return prismaTX.order.findUniqueOrThrow({
+        where: { id: orderReturn.orderId },
+        include: {
+          orderProducts: {
+            include: { product: true },
+          },
+          transactions: true,
+          orderReturns: {
+            include: {
+              returnedItems: {
+                include: { product: true },
+              },
+            },
+          },
+        },
+      });
+    });
+  }
+
+  async findAll(
     userId: bigint,
     query: PaginationQueryType,
   ): Promise<PaginatedResult<OrderOverviewResponseDTO>> {
@@ -77,16 +175,42 @@ export class OrderService {
       const pagination = this.prismaService.handleQueryPagination(query);
 
       const orders = await prisma.order.findMany({
-        ...removeFields(pagination, ['page']),
+        ...removeFields(pagination, 'page'),
         where: { userId },
-        include: {
-          orderProducts: true,
-          orderReturns: true,
-          transactions: true,
+        orderBy: { createdAt: 'desc' }, // Sort by newest
+        select: {
+          id: true,
+          userId: true,
+          createdAt: true,
+          orderStatus: true,
+          updatedAt: true,
+          orderProducts: {
+            select: {
+              productId: true,
+              totalQty: true,
+              pricePerItem: true,
+            },
+          },
+          transactions: {
+            select: {
+              id: true,
+              amount: true,
+              type: true,
+              createdAt: true,
+            },
+          },
+          orderReturns: {
+            select: {
+              id: true,
+              status: true,
+              createdAt: true,
+            },
+          },
         },
       });
 
-      const count = await prisma.order.count();
+      const count = await prisma.order.count({ where: { userId } });
+
       return {
         data: orders,
         ...this.prismaService.formatPaginationResponse({

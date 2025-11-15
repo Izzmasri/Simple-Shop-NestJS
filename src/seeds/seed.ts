@@ -34,6 +34,14 @@ async function main() {
       data: productSeeds,
     });
   }
+  await prisma.user.create({
+    data: {
+      name: 'Admin',
+      email: 'admin@example.com',
+      password: await argon.hash('admin123'),
+      role: 'ADMIN',
+    },
+  });
 
   console.log('Database has been seeded successfully.');
   await prisma.$disconnect();
